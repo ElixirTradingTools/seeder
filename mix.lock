@@ -1,0 +1,6 @@
+%{
+  "depo": {:hex, :depo, "1.7.1", "3d92f1e99961980c795749c33a97cc72516906494b35106615a1cc7b7d5ce713", [:mix], [{:esqlite, "~> 0.2.3", [hex: :esqlite, repo: "hexpm", optional: false]}], "hexpm", "808ac8704716656fb824ff7da8d860f5b82e79754e65c77bf0ec454d71f12ee4"},
+  "esqlite": {:hex, :esqlite, "0.2.5", "cab6d87aeb5f33d848b9bb8a21129e9512ea608f930d4c63576942d8f7d72218", [:rebar3], [], "hexpm", "3dd1163c8807b24a05ec4d88fd0f1bb286a2640ed340898fd792e3a67bb70f10"},
+  "jason": {:hex, :jason, "1.2.2", "ba43e3f2709fd1aa1dce90aaabfd039d000469c05c56f0b8e31978e03fa39052", [:mix], [{:decimal, "~> 1.0 or ~> 2.0", [hex: :decimal, repo: "hexpm", optional: true]}], "hexpm", "18a228f5f0058ee183f29f9eae0805c6e59d61c3b006760668d8d18ff0d12179"},
+  "typed_struct": {:hex, :typed_struct, "0.2.1", "e1993414c371f09ff25231393b6430bd89d780e2a499ae3b2d2b00852f593d97", [:mix], [], "hexpm", "8f5218c35ec38262f627b2c522542f1eae41f625f92649c0af701a6fab2e11b3"},
+}
