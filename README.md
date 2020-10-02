@@ -1,4 +1,3 @@
 # Seeder
 
-A tool for downloading data from polygon.io to a sqlite database
-for backtesting purposes.
+A tool for downloading market data to a sqlite database.
