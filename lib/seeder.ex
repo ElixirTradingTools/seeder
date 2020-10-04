@@ -16,7 +16,7 @@ defmodule Seeder do
     field :ticker, String.t()
     field :api_key, String.t()
     field :period_size, pos_integer(), default: 1
-    field :period_unit, :second | :minute | :hour | :day | :week | :month | nil
+    field :period_unit, :sec | :min | :hr | :day | :wk | :mon | nil
     field :start, Date.t()
     field :end, Date.t()
     field :db_root, String.t() | nil, default: nil
@@ -29,15 +29,35 @@ defmodule Seeder do
         ticker: sym,
         api_key: key,
         period_size: period_n,
-        period_unit: period_u
-      }) do
-    ["apikey=#{key}", "frequencyType=#{period_u}", "frequency=#{period_n}"]
-    |> Enum.join("&")
-    |> case do
-      query_string ->
-        "#{@ameritrade_url}/#{sym}/pricehistory?#{query_string}"
+        period_unit: period_u,
+        start: start_date,
+        end: end_date
+      })
+      when is_binary(sym) do
+    start_date = DateTime.to_unix(start_date, :millisecond)
+    end_date = DateTime.to_unix(end_date, :millisecond)
+
+    case period_u do
+      :min -> {:ok, :minute}
+      :day -> {:ok, :day}
+      :yr -> {:ok, :year}
+      unit -> {:error, "Unit type #{unit} is not supported with Ameritrade API"}
     end
-    |> to_charlist()
+    |> case do
+      {:error, reason} ->
+        {:error, reason}
+
+      {:ok, period_u} ->
+        [
+          "apikey=#{key}",
+          "startDate=#{start_date}",
+          "endDate=#{end_date}",
+          "frequencyType=#{period_u}",
+          "frequency=#{period_n}"
+        ]
+        |> Enum.join("&")
+        |> (fn query_str -> {:ok, '#{@ameritrade_url}/#{sym}/pricehistory?#{query_str}'} end).()
+    end
   end
 
   def convert_map_keys_to_atoms(map) do
@@ -49,17 +69,23 @@ defmodule Seeder do
   def ameritrade_dl(conf = %Conf{}) do
     conf
     |> get_ameritrade_path()
-    |> :httpc.request()
     |> case do
-      {:ok, {_response, _headers, body}} -> body
+      {:error, reason} ->
+        {:error, reason}
+
+      {:ok, path} ->
+        path
+        |> :httpc.request()
+        |> (fn {:ok, {_response, _headers, body}} -> body end).()
+        |> to_string()
+        |> Jason.decode!()
+        |> Map.get("candles")
+        |> Enum.map(fn
+          %{"open" => o, "high" => h, "low" => l, "close" => c, "volume" => v, "datetime" => t} ->
+            %{t: t, o: "#{o}", h: "#{h}", l: "#{l}", c: "#{c}", v: v}
+        end)
+        |> (fn bars -> {:ok, bars} end).()
     end
-    |> to_string()
-    |> Jason.decode!()
-    |> Map.get("candles")
-    |> Enum.map(fn
-      %{"open" => o, "high" => h, "low" => l, "close" => c, "volume" => v, "datetime" => t} ->
-        %{t: t, o: "#{o}", h: "#{h}", l: "#{l}", c: "#{c}", v: v}
-    end)
   end
 
   def polygon_dl(%Conf{
@@ -72,21 +98,34 @@ defmodule Seeder do
       }) do
     start_date = Date.to_iso8601(start_date)
     end_date = Date.to_iso8601(end_date)
-    path = Enum.join([sym, "range", time_n, time_u, start_date, end_date], "/")
 
-    '#{@polygon_url}/#{path}?apiKey=#{api_key}'
-    |> :httpc.request()
-    |> case do
-      {:ok, {_response, _headers, body}} -> body
+    case time_u do
+      :min -> {:ok, :minute}
+      :hr -> {:ok, :hour}
+      :day -> {:ok, :day}
+      :wk -> {:ok, :week}
+      :mon -> {:ok, :month}
+      unit -> {:error, "Unit type #{unit} is not supported with Polygon API"}
     end
-    |> to_string()
-    |> Jason.decode!()
-    |> Map.get("results")
-    |> Enum.map(fn bar ->
-      bar
-      |> convert_map_keys_to_atoms()
-      |> Map.drop([:vw])
-    end)
+    |> case do
+      {:error, reason} ->
+        {:error, reason}
+
+      {:ok, time_u} ->
+        [sym, "range", time_n, time_u, start_date, end_date]
+        |> Enum.join("/")
+        |> (fn str -> '#{@polygon_url}/#{str}?apiKey=#{api_key}' end).()
+        |> :httpc.request()
+        |> (fn {:ok, {_response, _headers, body}} -> body end).()
+        |> to_string()
+        |> Jason.decode!()
+        |> Map.get("results")
+        |> Enum.map(fn bar ->
+          bar
+          |> convert_map_keys_to_atoms()
+          |> Map.drop([:vw])
+        end)
+    end
   end
 
   def assets_db_handler(path) do
@@ -143,17 +182,21 @@ defmodule Seeder do
 
     {:ok, db} = chart_db_handler(conf)
 
-    bars =
-      case api_service do
-        :polygon -> polygon_dl(conf)
-        :ameritrade -> ameritrade_dl(conf)
-      end
+    case api_service do
+      :polygon -> polygon_dl(conf)
+      :ameritrade -> ameritrade_dl(conf)
+    end
+    |> case do
+      {:error, reason} ->
+        {:error, reason}
 
-    Enum.each(bars, fn %{t: t, o: o, h: h, l: l, c: c, v: v} ->
-      Depo.write(db, :add, [t, "#{o}", "#{h}", "#{l}", "#{c}", v])
-    end)
+      {:ok, bars} ->
+        Enum.each(bars, fn %{t: t, o: o, h: h, l: l, c: c, v: v} ->
+          Depo.write(db, :add, [t, "#{o}", "#{h}", "#{l}", "#{c}", v])
+        end)
 
-    Process.exit(db, :normal)
-    {:ok, "wrote #{length(bars)} records"}
+        Process.exit(db, :normal)
+        {:ok, "wrote #{length(bars)} records"}
+    end
   end
 end
