@@ -23,7 +23,8 @@ defmodule Seeder.MixProject do
     [
       {:depo, "~> 1.7"},
       {:jason, "~> 1.2"},
-      {:typed_struct, "~> 0.2.1"}
+      {:typed_struct, "~> 0.2.1"},
+      {:tzdata, "~> 1.0.3"}
     ]
   end
 end
