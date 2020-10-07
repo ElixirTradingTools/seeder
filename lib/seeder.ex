@@ -29,9 +29,9 @@ defmodule Seeder do
   @valid_intervals [:second, :minute, :hour, :day, :week, :month]
   @polygon_url 'https://api.polygon.io/v2/aggs/ticker'
   @ameritrade_url 'https://api.tdameritrade.com/v1/marketdata'
+  @tz_db Tzdata.TimeZoneDatabase
 
-  def tz, do: Tzdata.TimeZoneDatabase
-  def now, do: DateTime.now!("America/New_York", tz())
+  def now, do: DateTime.now!("America/New_York", @tz_db)
 
   # Seeder.new(
   #   "MSFT",
@@ -43,7 +43,14 @@ defmodule Seeder do
   #   "********************",
   # )
 
-  def new(sym, i6l_u, i6l_n, start_dt = %DateTime{}, end_dt = %DateTime{}, path, api_key)
+  def new!(sym, interval, window, path, api_key) do
+    case new(sym, interval, window, path, api_key) do
+      {:ok, conf} -> conf
+      {:error, reason} -> reason
+    end
+  end
+
+  def new(sym, {i6l_n, i6l_u}, {start_dt = %DateTime{}, end_dt = %DateTime{}}, path, api_key)
       when is_binary(sym) and
              is_binary(api_key) and
              i6l_u in @valid_intervals and
@@ -86,18 +93,19 @@ defmodule Seeder do
         api_key: key,
         interval_size: interval_n,
         interval_unit: interval_u,
-        start: start_date,
-        end: end_date
+        start: date_start,
+        end: date_end
       })
       when is_binary(sym) and interval_u in @valid_intervals do
-    start_date = DateTime.to_unix(start_date, :millisecond)
-    end_date = DateTime.to_unix(end_date, :millisecond)
+    date_start = DateTime.to_unix(date_start, :millisecond)
+    date_end = DateTime.to_unix(date_end, :millisecond)
 
-    case interval_u do
-      :minute -> {:ok, "minute"}
-      :day -> {:ok, "day"}
-      :month -> {:ok, "month"}
-      n -> {:error, "Interval `#{n}` is not supported with Ameritrade API"}
+    case {interval_n, interval_u} do
+      {1, :day} -> {:ok, "daily"}
+      {1, :week} -> {:ok, "weekly"}
+      {1, :month} -> {:ok, "monthly"}
+      {n, :minute} when n in [1, 5, 10, 15, 30] -> {:ok, "minute"}
+      {n, i6l} -> {:error, "Interval `[#{n} #{i6l}]` is not supported with Ameritrade API"}
     end
     |> case do
       {:error, reason} ->
@@ -106,8 +114,8 @@ defmodule Seeder do
       {:ok, interval_u} ->
         [
           "apikey=#{key}",
-          "startDate=#{start_date}",
-          "endDate=#{end_date}",
+          "startDate=#{date_start}",
+          "endDate=#{date_end}",
           "frequencyType=#{interval_u}",
           "frequency=#{interval_n}"
         ]
@@ -171,7 +179,7 @@ defmodule Seeder do
         |> Map.get("results")
         |> Enum.map(fn
           %{"datetime" => t, "open" => o, "high" => h, "low" => l, "close" => c, "volume" => v} ->
-            %{t: t, o: "#{o}", h: "#{h}", l: "#{l}", c: "#{c}", v: v}
+            %{t: div(t, 100), o: "#{o}", h: "#{h}", l: "#{l}", c: "#{c}", v: v}
         end)
 
       {:error, reason} ->
@@ -231,8 +239,6 @@ defmodule Seeder do
   def dl_to_db(conf = %Conf{}, api_service) when api_service in [:polygon, :ameritrade] do
     if(!File.dir?(conf.db_root), do: {:error, :invalid_data_path})
 
-    {:ok, db} = chart_db_handler(conf)
-
     case api_service do
       :polygon -> polygon_dl(conf)
       :ameritrade -> ameritrade_dl(conf)
@@ -242,6 +248,8 @@ defmodule Seeder do
         {:error, reason}
 
       {:ok, bars} ->
+        {:ok, db} = chart_db_handler(conf)
+
         Enum.each(bars, fn %{t: t, o: o, h: h, l: l, c: c, v: v} ->
           Depo.write(db, :add, [t, o, h, l, c, v])
         end)

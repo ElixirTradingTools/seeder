@@ -3,15 +3,13 @@
 A tool for downloading market data to a sqlite database.
 
 ```elixir
-%Seeder.Conf{
-    ticker: "AAPL",
-    start: Seeder.date(%Date{year: 2018, month: 1, day: 1}),
-    end: Seeder.now(),
-    period_size: 1,
-    period_unit: :minute,
-    db_root: "/your/data/path",
-    api_key: "****"
-}
+Seeder.new(
+    "AAPL",
+    {1, :minute},
+    {Seeder.date(%Date{year: 2018, month: 1, day: 1}), Seeder.now()},
+    "/your/data/path",
+    "****"
+)
 |> Seeder.dl_to_db(:ameritrade)
 ```
 
