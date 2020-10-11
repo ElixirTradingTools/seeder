@@ -6,7 +6,7 @@ defmodule Seeder do
           ticker: String.t(),
           api_key: String.t(),
           interval_size: pos_integer(),
-          interval_unit: :second | :minute | :hour | :day | :week | :month,
+          interval_unit: atom(),
           start: DateTime.t(),
           end: DateTime.t(),
           db_root: String.t() | nil
@@ -16,11 +16,7 @@ defmodule Seeder do
     field :ticker, String.t(), enforce: true
     field :api_key, String.t(), enforce: true
     field :interval_size, pos_integer(), default: 1, enforce: true
-
-    field :interval_unit, :second | :minute | :hour | :day | :week | :month,
-      default: :minute,
-      enforce: true
-
+    field :interval_unit, Atom.t(), default: :minute, enforce: true
     field :start, DateTime.t(), enforce: true
     field :end, DateTime.t(), enforce: true
     field :db_root, String.t() | nil, default: nil, enforce: true
